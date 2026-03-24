@@ -25,14 +25,22 @@ ensure_usr_overlay_for_ostree() {
     return 0
   fi
 
-  if ! command -v rpm-ostree >/dev/null 2>&1; then
-    echo "Detected an ostree-based system but rpm-ostree is not available. Cannot unlock /usr."
-    echo "Please unlock manually, then retry."
-    exit 3
+  if command -v ostree >/dev/null 2>&1; then
+    echo "Detected rpm-ostree root lock. Enabling persistent hotfix unlock via 'ostree admin unlock --hotfix'."
+    ostree admin unlock --hotfix
+    return 0
   fi
 
-  echo "Detected rpm-ostree root lock. Enabling temporary /usr overlay via 'rpm-ostree usroverlay'."
-  rpm-ostree usroverlay
+  if command -v rpm-ostree >/dev/null 2>&1; then
+    echo "Detected rpm-ostree root lock. Falling back to temporary /usr overlay via 'rpm-ostree usroverlay'."
+    echo "Note: this fallback does not persist across reboot."
+    rpm-ostree usroverlay
+    return 0
+  fi
+
+  echo "Detected an ostree-based system but neither 'ostree' nor 'rpm-ostree' is available. Cannot unlock /usr."
+  echo "Please unlock manually, then retry."
+  exit 3
 }
 
 ensure_prereqs_for_ostree() {

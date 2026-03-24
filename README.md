@@ -16,10 +16,16 @@ sudo ./setup_bt-cm749.sh
 
 ### rpm-ostree systems (Bazzite, Silverblue, Kinoite)
 
-On immutable/root-locked systems, this repository now tries to enable a temporary writable `/usr` overlay automatically with:
+On immutable/root-locked systems, this repository now tries to unlock `/usr` in a more persistent way first:
+```bash
+sudo ostree admin unlock --hotfix
+```
+
+If `ostree` is not available, it falls back to:
 ```bash
 sudo rpm-ostree usroverlay
 ```
+The fallback is temporary and does not persist across reboot.
 
 Before running setup, ensure required build packages are layered and reboot once:
 ```bash
