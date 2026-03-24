@@ -10,9 +10,62 @@ BIN_ABSPATH="$(dirname "$(readlink -f "${0}")")"
 KERNEL_MODULE_NAME="${1}"
 DKMS_MODULE_VERSION="${2}"
 
-. kernel-version_get.sh
+. "${BIN_ABSPATH}/kernel-version_get.sh"
+
+is_ostree_system() {
+  [ -f /run/ostree-booted ] || [ -d /sysroot/ostree ]
+}
+
+ensure_usr_overlay_for_ostree() {
+  if ! is_ostree_system; then
+    return 0
+  fi
+
+  if [ -w /usr/src ] || [ ! -e /usr/src ]; then
+    return 0
+  fi
+
+  if ! command -v rpm-ostree >/dev/null 2>&1; then
+    echo "Detected an ostree-based system but rpm-ostree is not available. Cannot unlock /usr."
+    echo "Please unlock manually, then retry."
+    exit 3
+  fi
+
+  echo "Detected rpm-ostree root lock. Enabling temporary /usr overlay via 'rpm-ostree usroverlay'."
+  rpm-ostree usroverlay
+}
+
+ensure_prereqs_for_ostree() {
+  local missing=0
+  local command_name
+
+  for command_name in dkms make gcc patch awk grep sed; do
+    if ! command -v "${command_name}" >/dev/null 2>&1; then
+      echo "Missing required command: ${command_name}"
+      missing=1
+    fi
+  done
+
+  if [ ! -d "/usr/src/kernels/${KERNEL_VERSION}" ] && [ ! -e "/lib/modules/${KERNEL_VERSION}/build" ]; then
+    echo "Missing kernel headers/devel tree for ${KERNEL_VERSION}."
+    missing=1
+  fi
+
+  if [ "${missing}" -ne 0 ]; then
+    cat <<'EOF'
+On rpm-ostree systems (Bazzite, Silverblue, Kinoite), install prerequisites via layering, then reboot:
+  rpm-ostree install dkms gcc make patch dwarves kernel-devel kernel-headers
+After reboot, re-run this script.
+EOF
+    exit 3
+  fi
+}
 
 # check OS prerequisites --------------------------------------------------------------------------
+
+if is_ostree_system; then
+  ensure_prereqs_for_ostree
+fi
 
 # perform OS-specific preparation steps
 if grep -qE "^ID(_LIKE)?=debian" /etc/os-release; then
@@ -22,6 +75,8 @@ if grep -qE "^ID(_LIKE)?=debian" /etc/os-release; then
     # see https://askubuntu.com/questions/1348250/skipping-btf-generation-xxx-due-to-unavailability-of-vmlinux-on-ubuntu-21-04
     cp /sys/kernel/btf/vmlinux "/usr/lib/modules/$(uname -r)/build/"
   fi
+elif is_ostree_system; then
+  echo "Detected ostree-based system. Skipping mutable-root package install steps."
 else
   echo "Preparation steps not (yet) supported for your Linux distro. You might want to modify the distro-specific commands."
 fi
@@ -39,6 +94,8 @@ if grep -qE "^ID(_LIKE)?=debian" /etc/os-release; then
   fi
 elif grep -q "^ID=arch" /etc/os-release; then
   pacman -S pahole dkms base-devel linux-headers
+elif is_ostree_system; then
+  echo "Detected ostree-based system. Package installation must be done via rpm-ostree layering outside this script."
 elif grep -q "^ID=fedora" /etc/os-release; then
   dnf install dwarves dkms kernel-devel kernel-headers  
 else
@@ -46,6 +103,8 @@ else
 fi
 
 # set up the actual DKMS module -------------------------------------------------------------------
+
+ensure_usr_overlay_for_ostree
 
 [ ! -e "/usr/src/${KERNEL_MODULE_NAME}-${DKMS_MODULE_VERSION}" ] && mkdir "/usr/src/${KERNEL_MODULE_NAME}-${DKMS_MODULE_VERSION}"
 

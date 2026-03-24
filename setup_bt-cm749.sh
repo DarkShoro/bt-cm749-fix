@@ -10,10 +10,37 @@ BIN_ABSPATH="$(dirname "$(readlink -f "${0}")")"
 KERNEL_MODULE_NAME='bt-cm749'
 DKMS_MODULE_VERSION='0.2'
 
+is_ostree_system() {
+	[ -f /run/ostree-booted ] || [ -d /sysroot/ostree ]
+}
+
+ensure_usr_overlay_for_ostree() {
+	if ! is_ostree_system; then
+		return 0
+	fi
+
+	if [ -w /usr/src ] || [ ! -e /usr/src ]; then
+		return 0
+	fi
+
+	if ! command -v rpm-ostree >/dev/null 2>&1; then
+		echo "Detected an ostree-based system but rpm-ostree is not available. Cannot unlock /usr."
+		echo "Please unlock manually, then retry."
+		exit 3
+	fi
+
+	echo "Detected rpm-ostree root lock. Enabling temporary /usr overlay via 'rpm-ostree usroverlay'."
+	rpm-ostree usroverlay
+}
+
 if [[ ! $EUID = 0 ]]; then
   echo "Only root can perform this setup. Aborting."
   exit 1
 fi
+
+. "${BIN_ABSPATH}/kernel-version_get.sh"
+
+ensure_usr_overlay_for_ostree
 
 # patch will be merged upstream in 6.18 
 if [ $SOURCE_MAJOR_VERSION -ge 6 ] && [ $SOURCE_MINOR_VERSION -ge 18 ]; then

@@ -14,6 +14,24 @@ sudo chmod u+x ./setup_bt-cm749.sh
 sudo ./setup_bt-cm749.sh
 ```
 
+### rpm-ostree systems (Bazzite, Silverblue, Kinoite)
+
+On immutable/root-locked systems, this repository now tries to enable a temporary writable `/usr` overlay automatically with:
+```bash
+sudo rpm-ostree usroverlay
+```
+
+Before running setup, ensure required build packages are layered and reboot once:
+```bash
+sudo rpm-ostree install dkms gcc make patch dwarves kernel-devel kernel-headers
+systemctl reboot
+```
+
+Then run setup normally:
+```bash
+sudo ./setup_bt-cm749.sh
+```
+
 After a successful build of the module and reboot of your machine, you can verify it with following command:
 ```bash
 sudo dkms status
